@@ -1,0 +1,69 @@
+# Gradle
+.gradle/
+build/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Stonecutter
+versions/
+!versions/*/gradle.properties
+versions/*/build/
+versions/*/.gradle/
+versions/*/.stonecutter/
+
+# Fabric Loom
+run/
+remappedSrc/
+.loom-cache/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.classpath
+.project
+.settings/
+bin/
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+*.lnk
+
+# Compiled
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Crash / Logs
+crash-reports/
+logs/
+hs_err_pid*
+replay_pid*
+heapdump*
+
+# Local config
+config/
+saves/
+schematics/
+local.properties
+*.env
+
+# Temp
+*.tmp
+*.bak
+*.swp
+*~

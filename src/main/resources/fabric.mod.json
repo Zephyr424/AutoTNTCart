@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "autotntcart",
+  "version": "${version}",
+  "name": "AutoTntCart",
+  "description": "一键完成瞬爆矿车技巧",
+  "authors": ["ShadowSlice"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.shadowslice.autotntcart.AutoTntCartMod"],
+    "client": ["com.shadowslice.autotntcart.AutoTntCartClient"],
+    "modmenu": ["com.shadowslice.autotntcart.AutoTntCartModMenu"]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.9",
+    "minecraft": ">=1.21.1",
+    "java": ">=21",
+    "fabric-api": "*",
+    "cloth-config": "*"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}
