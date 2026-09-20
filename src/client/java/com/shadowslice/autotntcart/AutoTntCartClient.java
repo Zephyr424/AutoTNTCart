@@ -11,13 +11,11 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.enchantment.EnchantmentHelper;
-import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import org.lwjgl.glfw.GLFW;
@@ -26,158 +24,155 @@ import org.lwjgl.glfw.GLFW;
 public class AutoTntCartClient implements ClientModInitializer {
 
     private static KeyMapping triggerKey;
-    private static KeyMapping modeKey;
-    public static CartMode currentMode = CartMode.BURST;
+    private static boolean running = false;
     private static long lastUseTime = 0;
 
     @Override
     public void onInitializeClient() {
         triggerKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.autotntcart.trigger",
+                InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_C,
-                "category.autotntcart"
-        ));
-        modeKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
-                "key.autotntcart.mode",
-                GLFW.GLFW_KEY_V,
                 "category.autotntcart"
         ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            ClientActionScheduler.tick();
             if (client.player == null || client.level == null) return;
-
-            // 模式切换
-            while (modeKey.consumeClick()) {
-                currentMode = currentMode.next();
-                client.player.displayClientMessage(
-                        Component.translatable("autotntcart.message.mode_switch",
-                                Component.translatable(currentMode.translationKey)),
-                        true
-                );
-            }
-
-            // 触发
             while (triggerKey.consumeClick()) {
                 onKeyPress(client);
             }
         });
     }
 
-    private void onKeyPress(Minecraft client) {
+    private static void onKeyPress(Minecraft client) {
+        if (running) return;
+
+        AutoTntCartConfig cfg = AutoTntCartConfig.get();
         long now = System.currentTimeMillis();
-        int cooldown = AutoTntCartMod.getConfig().cooldownMs;
-        if (now - lastUseTime < cooldown) {
-            long remain = cooldown - (now - lastUseTime);
-            sendTranslatable(client, "autotntcart.message.cooldown", remain);
-            return;
-        }
+        if (now - lastUseTime < cfg.cooldownMs) return;
 
         if (client.hitResult == null || client.hitResult.getType() != HitResult.Type.BLOCK) {
-            sendTranslatable(client, "autotntcart.message.aim_block");
+            sendMsg(client, "autotntcart.message.aim_block");
             return;
         }
-        BlockHitResult hit = (BlockHitResult) client.hitResult;
 
-        if (currentMode == CartMode.BURST || currentMode == CartMode.PLACE) {
-            if (hit.getDirection() != net.minecraft.core.Direction.UP) {
-                sendTranslatable(client, "autotntcart.message.aim_top");
-                return;
+        // 判断服务端是否支持我们的自定义包
+        boolean serverAvailable = ClientPlayNetworking.canSend(AutoTntCartPayload.ID);
+
+        boolean useServer;
+        switch (cfg.mode) {
+            case SERVER -> {
+                if (!serverAvailable) {
+                    sendMsg(client, "autotntcart.message.server_unavailable");
+                    return;
+                }
+                useServer = true;
             }
-            String missingKey = getMissingItemsKey(client);
-            if (missingKey != null) {
-                sendTranslatable(client, missingKey);
-                return;
-            }
-        } else if (currentMode == CartMode.DETONATE) {
-            String missingKey = getDetonateMissingKey(client);
-            if (missingKey != null) {
-                sendTranslatable(client, missingKey);
-                return;
-            }
-        } else if (currentMode == CartMode.CHAIN) {
-            if (!hasRail(client)) {
-                sendTranslatable(client, "autotntcart.message.missing_rail");
-                return;
-            }
+            case CLIENT -> useServer = false;
+            case AUTO -> useServer = serverAvailable;
+            default -> useServer = false;
         }
 
         lastUseTime = now;
-        ClientPlayNetworking.send(new AutoTntCartPayload(
-                hit.getBlockPos(), hit.getDirection(), currentMode.ordinal()));
+
+        if (useServer) {
+            BlockHitResult hit = (BlockHitResult) client.hitResult;
+            ClientPlayNetworking.send(new AutoTntCartPayload(hit.getBlockPos(), hit.getDirection()));
+        } else {
+            startClientSimulation(client);
+        }
     }
 
-    /** 返回缺失物品的翻译键，如果没有缺失则返回 null */
-    private String getMissingItemsKey(Minecraft client) {
+    // ============================================================
+    // 客户端模拟：切弓 → 拉弓 → 射箭 → 切铁轨 → 放 → 切矿车 → 放
+    // ============================================================
+    private static void startClientSimulation(Minecraft client) {
         LocalPlayer player = client.player;
-        Inventory inventory = player.getInventory();
-        boolean hasRail = false, hasCart = false, hasArrow = false;
-        boolean hasFlameBow = false, bowHasInfinity = false;
+        if (player == null) return;
 
-        var lookup = client.level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
-        var flameEntry = lookup.getOrThrow(Enchantments.FLAME);
-        var infEntry = lookup.getOrThrow(Enchantments.INFINITY);
+        Inventory inv = player.getInventory();
 
-        for (int i = 0; i < 36; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (stack.isEmpty()) continue;
-            if (!hasRail && stack.is(Items.RAIL)) hasRail = true;
-            else if (!hasCart && stack.is(Items.TNT_MINECART)) hasCart = true;
-            else if (stack.is(Items.BOW)) {
-                if (EnchantmentHelper.getItemEnchantmentLevel(flameEntry, stack) > 0) hasFlameBow = true;
-                if (EnchantmentHelper.getItemEnchantmentLevel(infEntry, stack) > 0) bowHasInfinity = true;
-            } else if (!hasArrow && (stack.is(Items.ARROW) || stack.is(Items.TIPPED_ARROW)
-                    || stack.is(Items.SPECTRAL_ARROW))) hasArrow = true;
+        int bowSlot = -1, railSlot = -1, cartSlot = -1;
+        for (int i = 0; i < 9; i++) {
+            ItemStack s = inv.getItem(i);
+            if (bowSlot < 0 && s.is(Items.BOW) && EnchantHelper.hasFlame(player.level(), s)) {
+                bowSlot = i;
+            } else if (railSlot < 0 && isRail(s)) {
+                railSlot = i;
+            } else if (cartSlot < 0 && s.is(Items.TNT_MINECART)) {
+                cartSlot = i;
+            }
         }
 
-        if (!hasRail) return "autotntcart.message.missing_rail";
-        if (!hasCart) return "autotntcart.message.missing_cart";
-        if (!hasFlameBow) return "autotntcart.message.missing_bow";
-        if (!bowHasInfinity && !hasArrow) return "autotntcart.message.missing_arrow";
-        return null;
-    }
+        if (bowSlot < 0) { sendMsg(client, "autotntcart.message.no_bow"); return; }
+        if (railSlot < 0) { sendMsg(client, "autotntcart.message.no_rail"); return; }
+        if (cartSlot < 0) { sendMsg(client, "autotntcart.message.no_cart"); return; }
 
-    /** 远程引爆模式的缺失物品检查 */
-    private String getDetonateMissingKey(Minecraft client) {
-        LocalPlayer player = client.player;
-        Inventory inventory = player.getInventory();
-        boolean hasArrow = false, hasFlameBow = false, bowHasInfinity = false;
-
-        var lookup = client.level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
-        var flameEntry = lookup.getOrThrow(Enchantments.FLAME);
-        var infEntry = lookup.getOrThrow(Enchantments.INFINITY);
-
-        for (int i = 0; i < 36; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (stack.isEmpty()) continue;
-            if (stack.is(Items.BOW)) {
-                if (EnchantmentHelper.getItemEnchantmentLevel(flameEntry, stack) > 0) hasFlameBow = true;
-                if (EnchantmentHelper.getItemEnchantmentLevel(infEntry, stack) > 0) bowHasInfinity = true;
-            } else if (!hasArrow && (stack.is(Items.ARROW) || stack.is(Items.TIPPED_ARROW)
-                    || stack.is(Items.SPECTRAL_ARROW))) hasArrow = true;
+        boolean creative = player.isCreative();
+        boolean infinite = EnchantHelper.hasInfinity(player.level(), inv.getItem(bowSlot));
+        if (!creative && !infinite && !hasArrowInInventory(inv)) {
+            sendMsg(client, "autotntcart.message.no_arrow");
+            return;
         }
 
-        if (!hasFlameBow) return "autotntcart.message.missing_bow";
-        if (!bowHasInfinity && !hasArrow) return "autotntcart.message.missing_arrow";
-        return null;
+        int originalSlot = inv.selected;
+        running = true;
+        ClientActionScheduler.clear();
+
+        // Tick 0：切到弓，按下右键（开始拉弓）
+        ClientActionScheduler.schedule(0, () -> {
+            inv.selected = bowSlot;
+            client.options.keyUse.setDown(true);
+        });
+
+        // Tick 4：松开右键（射箭）
+        ClientActionScheduler.schedule(4, () -> client.options.keyUse.setDown(false));
+
+        // Tick 5：切到铁轨
+        ClientActionScheduler.schedule(5, () -> inv.selected = railSlot);
+
+        // Tick 6：放置铁轨
+        ClientActionScheduler.schedule(6, () -> placeBlock(client));
+
+        // Tick 7：切到 TNT 矿车
+        ClientActionScheduler.schedule(7, () -> inv.selected = cartSlot);
+
+        // Tick 8：放置 TNT 矿车
+        ClientActionScheduler.schedule(8, () -> placeBlock(client));
+
+        // Tick 10：恢复原槽位
+        ClientActionScheduler.schedule(10, () -> {
+            inv.selected = originalSlot;
+            running = false;
+        });
     }
 
-    private boolean hasRail(Minecraft client) {
-        Inventory inv = client.player.getInventory();
-        for (int i = 0; i < 36; i++) {
-            if (inv.getItem(i).is(Items.RAIL)) return true;
+    private static void placeBlock(Minecraft client) {
+        if (client.gameMode == null || client.player == null) return;
+        if (client.hitResult instanceof BlockHitResult hit) {
+            client.gameMode.useItemOn(client.player, InteractionHand.MAIN_HAND, hit);
+        }
+    }
+
+    private static boolean isRail(ItemStack s) {
+        return s.is(Items.RAIL) || s.is(Items.POWERED_RAIL)
+                || s.is(Items.DETECTOR_RAIL) || s.is(Items.ACTIVATOR_RAIL);
+    }
+
+    private static boolean hasArrowInInventory(Inventory inv) {
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            if (s.is(Items.ARROW) || s.is(Items.TIPPED_ARROW)
+                    || s.is(Items.SPECTRAL_ARROW)) return true;
         }
         return false;
     }
 
-    private void sendTranslatable(Minecraft client, String key) {
+    private static void sendMsg(Minecraft client, String key) {
+        if (!AutoTntCartConfig.get().showMessages) return;
         if (client.player != null) {
             client.player.displayClientMessage(Component.translatable(key), true);
-        }
-    }
-
-    private void sendTranslatable(Minecraft client, String key, Object... args) {
-        if (client.player != null) {
-            client.player.displayClientMessage(Component.translatable(key, args), true);
         }
     }
 }

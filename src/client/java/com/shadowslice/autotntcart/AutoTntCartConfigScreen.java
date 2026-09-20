@@ -8,53 +8,43 @@ import net.minecraft.network.chat.Component;
 
 public class AutoTntCartConfigScreen {
     public static Screen create(Screen parent) {
-        AutoTntCartConfig config = AutoTntCartMod.getConfig();
+        AutoTntCartConfig config = AutoTntCartConfig.get();
 
         ConfigBuilder builder = ConfigBuilder.create()
                 .setParentScreen(parent)
                 .setTitle(Component.translatable("autotntcart.config.title"));
 
-        ConfigEntryBuilder entryBuilder = builder.entryBuilder();
+        ConfigEntryBuilder entry = builder.entryBuilder();
         ConfigCategory general = builder.getOrCreateCategory(
                 Component.translatable("autotntcart.config.category.general"));
 
-        // 冷却时间（毫秒）
-        general.addEntry(entryBuilder
+        // 触发模式
+        general.addEntry(entry
+                .startEnumSelector(Component.translatable("autotntcart.config.mode"),
+                        AutoTntCartConfig.TriggerMode.class, config.mode)
+                .setDefaultValue(AutoTntCartConfig.TriggerMode.AUTO)
+                .setTooltip(Component.translatable("autotntcart.config.mode.tooltip"))
+                .setSaveConsumer(v -> config.mode = v)
+                .build());
+
+        // 冷却
+        general.addEntry(entry
                 .startIntField(Component.translatable("autotntcart.config.cooldown"), config.cooldownMs)
-                .setDefaultValue(500)
-                .setMin(0)
-                .setMax(10000)
+                .setDefaultValue(1000)
+                .setMin(0).setMax(10000)
                 .setTooltip(Component.translatable("autotntcart.config.cooldown.tooltip"))
                 .setSaveConsumer(v -> config.cooldownMs = v)
                 .build());
 
-        // 自动补充
-        general.addEntry(entryBuilder
-                .startBooleanToggle(Component.translatable("autotntcart.config.auto_restock"), config.autoRestock)
+        // 显示消息
+        general.addEntry(entry
+                .startBooleanToggle(Component.translatable("autotntcart.config.show_messages"), config.showMessages)
                 .setDefaultValue(true)
-                .setTooltip(Component.translatable("autotntcart.config.auto_restock.tooltip"))
-                .setSaveConsumer(v -> config.autoRestock = v)
+                .setTooltip(Component.translatable("autotntcart.config.show_messages.tooltip"))
+                .setSaveConsumer(v -> config.showMessages = v)
                 .build());
 
-        // 智能瞄准
-        general.addEntry(entryBuilder
-                .startBooleanToggle(Component.translatable("autotntcart.config.smart_aim"), config.smartAim)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("autotntcart.config.smart_aim.tooltip"))
-                .setSaveConsumer(v -> config.smartAim = v)
-                .build());
-
-        // 默认模式（下拉菜单）
-        general.addEntry(entryBuilder
-                .startEnumSelector(Component.translatable("autotntcart.config.default_mode"), CartMode.class, config.getDefaultMode())
-                .setDefaultValue(CartMode.BURST)
-                .setTooltip(Component.translatable("autotntcart.config.default_mode.tooltip"))
-                .setSaveConsumer(v -> config.defaultMode = v.ordinal())
-                .build());
-
-        // 保存时回调
-        builder.setSavingRunnable(AutoTntCartMod::saveConfig);
-
+        builder.setSavingRunnable(AutoTntCartConfig::save);
         return builder.build();
     }
 }

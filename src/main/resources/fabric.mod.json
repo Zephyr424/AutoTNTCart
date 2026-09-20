@@ -3,7 +3,7 @@
   "id": "autotntcart",
   "version": "${version}",
   "name": "AutoTntCart",
-  "description": "一键完成瞬爆矿车技巧",
+  "description": "One-click instant TNT minecart trick — works on any server",
   "authors": ["ShadowSlice"],
   "license": "MIT",
   "environment": "*",

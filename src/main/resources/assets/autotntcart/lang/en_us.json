@@ -28,5 +28,16 @@
   "autotntcart.config.smart_aim": "Smart Aim Assist",
   "autotntcart.config.smart_aim.tooltip": "Automatically find adjacent placeable blocks when target is blocked",
   "autotntcart.config.default_mode": "Default Mode",
-  "autotntcart.config.default_mode.tooltip": "The mode used when first joining a world"
+  "autotntcart.config.default_mode.tooltip": "The mode used when first joining a world",
+  "autotntcart.message.no_bow": "Need a bow with Flame enchantment in hotbar",
+  "autotntcart.message.no_rail": "Need a rail in hotbar",
+  "autotntcart.message.no_cart": "Need a TNT minecart in hotbar",
+  "autotntcart.message.no_arrow": "Need at least one arrow in inventory",
+  "autotntcart.message.no_place": "Cannot place here",
+  "autotntcart.message.aim_block": "Please aim at a block",
+  "autotntcart.message.server_unavailable": "Server mode unavailable — mod not installed on server",
+  "autotntcart.config.mode": "Trigger Mode",
+  "autotntcart.config.mode.tooltip": "AUTO: server if available, otherwise client simulation. SERVER: force server mode. CLIENT: force client simulation.",
+  "autotntcart.config.show_messages": "Show Messages",
+  "autotntcart.config.show_messages.tooltip": "Display action messages in the hotbar"
 }
